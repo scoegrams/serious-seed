@@ -19,14 +19,33 @@ const SHAKE = {
 const ANIM_FRAMES = 3;
 const ANIM_FPS    = 10;
 
+/** Steps per engine cycle (must match `ANIM_FRAMES`). */
+export const WIGGLE_GIF_CYCLE_STEPS = ANIM_FRAMES;
+export const WIGGLE_GIF_FRAME_DELAY_MS = Math.round(1000 / ANIM_FPS);
+/** How many full cycles to encode (seamless loop: last frame → first). */
+export const WIGGLE_GIF_CYCLE_REPEAT = 2;
+
 let frameCounter = 0;
 let lastTick = 0;
 
-export function renderFrame(ctx, width, height, { theme, strokes, layers }) {
-  const now = performance.now();
-  if (now - lastTick > 1000 / ANIM_FPS) {
-    frameCounter++;
-    lastTick = now;
+/**
+ * @param {object} opts
+ * @param {number} [opts.animStepOverride] — If set (integer), draw that step of the
+ *   shake cycle only and do not advance the live clock (used for seamless looping GIFs).
+ */
+export function renderFrame(ctx, width, height, opts) {
+  const { theme, strokes, layers, animStepOverride } = opts;
+
+  let tick;
+  if (animStepOverride != null) {
+    tick = animStepOverride;
+  } else {
+    const now = performance.now();
+    if (now - lastTick > 1000 / ANIM_FPS) {
+      frameCounter++;
+      lastTick = now;
+    }
+    tick = frameCounter;
   }
 
   const bg = theme === "dark" ? "#111" : "#fff";
@@ -42,7 +61,7 @@ export function renderFrame(ctx, width, height, { theme, strokes, layers }) {
         continue;
       }
       ctx.save();
-      draw(ctx, s, bg, strokeIdx);
+      draw(ctx, s, bg, strokeIdx, tick);
       ctx.restore();
       strokeIdx++;
     }
@@ -58,12 +77,12 @@ function hash(a, b, c) {
   return (s - Math.floor(s)) * 2 - 1;
 }
 
-function jitter(strokeIdx, pointIdx, axis, mag) {
-  const cell = (frameCounter + strokeIdx * 7) % ANIM_FRAMES;
+function jitter(strokeIdx, pointIdx, axis, mag, tick) {
+  const cell = (tick + strokeIdx * 7) % ANIM_FRAMES;
   return hash(strokeIdx + pointIdx * 13, cell, axis) * mag;
 }
 
-function draw(ctx, s, bg, si) {
+function draw(ctx, s, bg, si, tick) {
   const kind  = s.type ?? "pencil";
   const shake = SHAKE[kind] ?? 0.7;
   const color = kind === "eraser" ? bg : s.color;
@@ -81,8 +100,8 @@ function draw(ctx, s, bg, si) {
       if (!offs) continue;
       for (let oi = 0; oi < offs.length; oi++) {
         const off = offs[oi];
-        const dx = jitter(si, pi * 100 + oi, 0, shake);
-        const dy = jitter(si, pi * 100 + oi, 1, shake);
+        const dx = jitter(si, pi * 100 + oi, 0, shake, tick);
+        const dy = jitter(si, pi * 100 + oi, 1, shake, tick);
         ctx.fillRect(
           Math.floor(p.x + off.x + dx),
           Math.floor(p.y + off.y + dy),
@@ -101,8 +120,8 @@ function draw(ctx, s, bg, si) {
     const half = stampSize / 2;
     const grid = 6;
     const cell = stampSize / grid;
-    const sx = jitter(si, 999, 0, shake);
-    const sy = jitter(si, 999, 1, shake);
+    const sx = jitter(si, 999, 0, shake, tick);
+    const sy = jitter(si, 999, 1, shake, tick);
     ctx.fillStyle = color;
     let val = s.seed * 999;
     for (let gy = 0; gy < grid; gy++) {
@@ -132,8 +151,8 @@ function draw(ctx, s, bg, si) {
 
   if (pts.length === 1) {
     const r = Math.max(0.5, size * 0.5);
-    const dx = jitter(si, 0, 0, shake);
-    const dy = jitter(si, 0, 1, shake);
+    const dx = jitter(si, 0, 0, shake, tick);
+    const dy = jitter(si, 0, 1, shake, tick);
     ctx.beginPath();
     ctx.arc(pts[0].x + dx, pts[0].y + dy, r, 0, Math.PI * 2);
     ctx.fill();
@@ -142,8 +161,8 @@ function draw(ctx, s, bg, si) {
 
   ctx.beginPath();
   for (let i = 0; i < pts.length; i++) {
-    const x = pts[i].x + jitter(si, i, 0, shake);
-    const y = pts[i].y + jitter(si, i, 1, shake);
+    const x = pts[i].x + jitter(si, i, 0, shake, tick);
+    const y = pts[i].y + jitter(si, i, 1, shake, tick);
     if (i === 0) ctx.moveTo(x, y);
     else         ctx.lineTo(x, y);
   }

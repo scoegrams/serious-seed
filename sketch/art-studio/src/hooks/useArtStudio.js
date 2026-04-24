@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import GIF from "gif.js";
 import workerUrl from "gif.js/dist/gif.worker.js?url";
-import { renderFrame } from "../canvas/renderFrame.js";
+import {
+  renderFrame,
+  WIGGLE_GIF_CYCLE_REPEAT,
+  WIGGLE_GIF_CYCLE_STEPS,
+  WIGGLE_GIF_FRAME_DELAY_MS,
+} from "../canvas/renderFrame.js";
 import { generateSprayPattern } from "../canvas/spray.js";
 import {
   BRUSH_OPACITY_MAX,
@@ -578,26 +583,30 @@ export function useArtStudio() {
       width: canvasSize,
       height: canvasSize,
       workerScript: workerUrl,
+      repeat: 0,
     });
-    let f = 0;
-    const cap = () => {
-      if (f < 12) {
-        gif.addFrame(ctx, { copy: true, delay: 100 });
-        f++;
-        setTimeout(cap, 100);
-      } else {
-        gif.on("finished", (b) => {
-          const url = URL.createObjectURL(b);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `wiggle-${currentWord.text}.gif`;
-          link.click();
-          setIsRecording(false);
+
+    for (let lap = 0; lap < WIGGLE_GIF_CYCLE_REPEAT; lap++) {
+      for (let step = 0; step < WIGGLE_GIF_CYCLE_STEPS; step++) {
+        renderFrame(ctx, canvasSize, canvasSize, {
+          theme: themeRef.current,
+          strokes: strokesRef.current,
+          layers: layersRef.current,
+          animStepOverride: step,
         });
-        gif.render();
+        gif.addFrame(ctx, { copy: true, delay: WIGGLE_GIF_FRAME_DELAY_MS });
       }
-    };
-    cap();
+    }
+
+    gif.on("finished", (b) => {
+      const url = URL.createObjectURL(b);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `wiggle-${currentWord.text}.gif`;
+      link.click();
+      setIsRecording(false);
+    });
+    gif.render();
   }, [canvasSize, currentWord.text, isRecording]);
 
   const toggleTheme = useCallback(() => {
